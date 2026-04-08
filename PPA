@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>태양광 PPA 에너지 흐름 시뮬레이션</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background: #eef1f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            background: #fff;
+            border-radius: 22px;
+            box-shadow: 0 8px 48px rgba(0,0,0,0.07);
+            max-width: 760px;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        /* ── Header ── */
+        .header {
+            background: linear-gradient(135deg, #1a237e 0%, #283593 100%);
+            padding: 22px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .header-badge {
+            background: rgba(255,255,255,0.15);
+            color: #fff;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 20px;
+            letter-spacing: 1px;
+        }
+        .header-title {
+            color: #fff;
+            font-size: 17px;
+            font-weight: 700;
+            letter-spacing: -0.3px;
+        }
+        .header-stats {
+            display: flex;
+            gap: 22px;
+        }
+        .stat-item { text-align: center; }
+        .stat-item .stat-label {
+            font-size: 10px;
+            color: rgba(255,255,255,0.6);
+            margin-bottom: 2px;
+        }
+        .stat-item .stat-value {
+            font-size: 14px;
+            font-weight: 700;
+            color: #fff;
+        }
+        .stat-value.export-color { color: #69f0ae; }
+        .stat-value.import-color { color: #ff8a80; }
+        .stat-value.self-color { color: #fff59d; }
+
+        /* ── Canvas ── */
+        .canvas-area {
+            position: relative;
+            width: 100%;
+            height: 400px;
+        }
+        .canvas-area svg {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+        }
+        .flow-path {
+            fill: none;
+            stroke-width: 3;
+            stroke-linecap: round;
+            opacity: 0.12;
+            transition: opacity 0.4s;
+        }
+        .node-bg {
+            fill: #fff;
+            stroke: #e0e0e0;
+            stroke-width: 1.5;
+            filter: drop-shadow(0 3px 8px rgba(0,0,0,0.06));
+            transition: all 0.4s;
+        }
+        .node-label {
+            font-family: 'Noto Sans KR', sans-serif;
+            font-size: 12px;
+            fill: #444;
+            font-weight: 600;
+        }
+        .node-sub {
+            font-family: 'Noto Sans KR', sans-serif;
+            font-size: 10px;
+            fill: #999;
+            font-weight: 400;
+        }
+        .node-value {
+            font-family: 'Noto Sans KR', sans-serif;
+            font-size: 11px;
+            font-weight: 700;
+            fill: #1a237e;
+        }
+
+        /* ── PPA Info Cards ── */
+        .info-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 12px;
+            padding: 0 26px 18px;
+        }
+        .info-card {
+            background: #f8f9fb;
+            border-radius: 12px;
+            padding: 14px 16px;
+            text-align: center;
+            border: 1px solid #eee;
+            transition: all 0.3s;
+        }
+        .info-card.highlight {
+            background: linear-gradient(135deg, #e8eaf6, #f3e5f5);
+            border-color: #c5cae9;
+        }
+        .info-card .ic-label {
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 4px;
+        }
+        .info-card .ic-value {
+            font-size: 18px;
+            font-weight: 800;
+            color: #1a237e;
+        }
+        .info-card .ic-unit {
+            font-size: 11px;
+            color: #666;
+            margin-top: 2px;
+        }
+        .ic-value.saving { color: #2e7d32; }
+        .ic-value.cost { color: #c62828; }
+
+        /* ── Controls ── */
+        .controls {
+            padding: 18px 26px 24px;
+            border-top: 1px solid #f0f0f0;
+            display: flex;
+            gap: 24px;
+        }
+        .control-group {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .ctrl-icon { font-size: 18px; }
+        .ctrl-label {
+            font-size: 11px;
+            color: #777;
+            white-space: nowrap;
+            min-width: 58px;
+        }
+        .slider-wrap {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            flex: 1;
+            height: 6px;
+            border-radius: 3px;
+            outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px; height: 20px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 3px solid #fff;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+        #sl-sun { background: linear-gradient(to right, #e0e0e0, #ff8f00); }
+        #sl-sun::-webkit-slider-thumb { background: #ff8f00; }
+        #sl-dem { background: linear-gradient(to right, #e0e0e0, #1565c0); }
+        #sl-dem::-webkit-slider-thumb { background: #1565c0; }
+        .slider-num {
+            min-width: 38px;
+            text-align: center;
+            font-size: 14px;
+            font-weight: 700;
+            color: #333;
+            background: #f0f1f3;
+            padding: 4px 8px;
+            border-radius: 8px;
+        }
+
+        /* ── Flow direction arrow labels ── */
+        .arrow-label {
+            font-family: 'Noto Sans KR', sans-serif;
+            font-size: 9px;
+            font-weight: 600;
+            fill: #aaa;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- Header -->
+    <div class="header">
+        <div class="header-left">
+            <span class="header-badge">PPA</span>
+            <span class="header-title">태양광 PPA 에너지 흐름도</span>
+        </div>
+        <div class="header-stats">
+            <div class="stat-item">
+                <div class="stat-label">발전량</div>
+                <div class="stat-value" id="h-gen">120 kW</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">자가소비</div>
+                <div class="stat-value self-color" id="h-self">48 kW</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">잉여송전</div>
+                <div class="stat-value export-color" id="h-export">72 kW</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">상태</div>
+                <div class="stat-value" id="h-status">송전 중</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SVG Canvas -->
+    <div class="canvas-area">
+        <svg id="flowSvg" viewBox="0 0 760 400" xmlns="http://www.w3.org/2000/svg">
+            <!-- Flow Paths -->
+            <!-- Solar → Inverter -->
+            <path id="path-solar" class="flow-path" stroke="#FF8F00"
+                  d="M155,120 C240,120 260,200 350,200"/>
+            <!-- Inverter → Home (자가소비) -->
+            <path id="path-home" class="flow-path" stroke="#43A047"
+                  d="M390,200 C480,200 500,120 600,120"/>
+            <!-- Inverter → Grid (잉여 송전) -->
+            <path id="path-export" class="flow-path" stroke="#1565C0"
+                  d="M370,230 C400,320 450,340 540,340"/>
+            <!-- Grid → Home (부족분 수전) -->
+            <path id="path-import" class="flow-path" stroke="#E53935"
+                  d="M580,340 C620,280 630,200 610,150"/>
+
+            <!-- ── Nodes ── -->
+            <!-- Solar Panel -->
+            <g id="node-solar">
+                <rect class="node-bg" x="70" y="62" width="130" height="100" rx="16"/>
+                <!-- Panel icon -->
+                <g transform="translate(110,72)">
+                    <rect x="0" y="4" width="50" height="32" rx="3" fill="none" stroke="#FF8F00" stroke-width="2"/>
+                    <line x1="0" y1="15" x2="50" y2="15" stroke="#FF8F00" stroke-width="1.2"/>
+                    <line x1="0" y1="25" x2="50" y2="25" stroke="#FF8F00" stroke-width="1.2"/>
+                    <line x1="17" y1="4" x2="17" y2="36" stroke="#FF8F00" stroke-width="1.2"/>
+                    <line x1="33" y1="4" x2="33" y2="36" stroke="#FF8F00" stroke-width="1.2"/>
+                    <line x1="22" y1="36" x2="22" y2="42" stroke="#FF8F00" stroke-width="2"/>
+                    <line x1="28" y1="36" x2="28" y2="42" stroke="#FF8F00" stroke-width="2"/>
+                    <line x1="16" y1="42" x2="34" y2="42" stroke="#FF8F00" stroke-width="2"/>
+                    <!-- Rays -->
+                    <circle cx="8" cy="0" r="2" fill="#FFD54F" opacity="0.7"/>
+                    <circle cx="25" cy="-3" r="2" fill="#FFD54F" opacity="0.7"/>
+                    <circle cx="42" cy="0" r="2" fill="#FFD54F" opacity="0.7"/>
+                </g>
+                <text class="node-label" x="135" y="136" text-anchor="middle">태양광 패널</text>
+                <text class="node-sub" x="135" y="150" text-anchor="middle">PPA 사업자 소유</text>
+            </g>
+
+            <!-- Inverter -->
+            <g id="node-inverter">
+                <rect class="node-bg" x="310" y="165" width="100" height="75" rx="16"/>
+                <g transform="translate(338,174)">
+                    <rect x="0" y="0" width="44" height="36" rx="6" fill="none" stroke="#1565C0" stroke-width="2"/>
+                    <text x="22" y="14" text-anchor="middle" font-size="9" font-weight="700" fill="#1565C0" font-family="'Noto Sans KR'">DC</text>
+                    <line x1="6" y1="19" x2="38" y2="19" stroke="#1565C0" stroke-width="1"/>
+                    <text x="22" y="32" text-anchor="middle" font-size="9" font-weight="700" fill="#1565C0" font-family="'Noto Sans KR'">AC</text>
+                </g>
+                <text class="node-label" x="360" y="228" text-anchor="middle">인버터</text>
+            </g>
+
+            <!-- Home / Building -->
+            <g id="node-home">
+                <rect class="node-bg" x="540" y="62" width="130" height="100" rx="16"/>
+                <g transform="translate(580,72)">
+                    <path d="M25 4 L48 22 L44 22 L44 44 L6 44 L6 22 L2 22 Z" fill="none" stroke="#43A047" stroke-width="2" stroke-linejoin="round"/>
+                    <rect x="18" y="28" width="14" height="16" fill="none" stroke="#43A047" stroke-width="1.5" rx="2"/>
+                    <line x1="25" y1="28" x2="25" y2="44" stroke="#43A047" stroke-width="1"/>
+                </g>
+                <text class="node-label" x="605" y="136" text-anchor="middle">수요처 (건물)</text>
+                <text class="node-sub" x="605" y="150" text-anchor="middle" id="home-sub">전력 소비</text>
+            </g>
+
+            <!-- Grid / KEPCO -->
+            <g id="node-grid">
+                <rect class="node-bg" x="480" y="300" width="140" height="80" rx="16"/>
+                <g transform="translate(520,308)">
+                    <!-- Pylon icon -->
+                    <path d="M30 0 L40 40 M30 0 L20 40 M15 16 L45 16 M18 28 L42 28" fill="none" stroke="#546E7A" stroke-width="2" stroke-linecap="round"/>
+                    <line x1="30" y1="0" x2="30" y2="40" stroke="#546E7A" stroke-width="2"/>
+                </g>
+                <text class="node-label" x="550" y="362" text-anchor="middle">한국전력 (계통)</text>
+                <text class="node-value" x="550" y="376" text-anchor="middle" id="grid-val"></text>
+            </g>
+
+            <!-- Flow labels on paths -->
+            <text class="arrow-label" x="240" y="148" id="lbl-solar" opacity="0">발전 →</text>
+            <text class="arrow-label" x="490" y="148" id="lbl-home" opacity="0">→ 소비</text>
+            <text class="arrow-label" x="420" y="310" id="lbl-export" opacity="0">잉여 송전 ↓</text>
+            <text class="arrow-label" x="630" y="260" id="lbl-import" opacity="0">← 수전</text>
+
+            <!-- Dots container -->
+            <g id="dots-container"></g>
+        </svg>
+    </div>
+
+    <!-- PPA Info Cards -->
+    <div class="info-row">
+        <div class="info-card">
+            <div class="ic-label">PPA 단가</div>
+            <div class="ic-value">100</div>
+            <div class="ic-unit">원/kWh (고정)</div>
+        </div>
+        <div class="info-card">
+            <div class="ic-label">한전 단가</div>
+            <div class="ic-value">140</div>
+            <div class="ic-unit">원/kWh (평균)</div>
+        </div>
+        <div class="info-card highlight">
+            <div class="ic-label">예상 절감액</div>
+            <div class="ic-value saving" id="ic-saving">0</div>
+            <div class="ic-unit">원/시간</div>
+        </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls">
+        <div class="control-group">
+            <span class="ctrl-icon">☀️</span>
+            <span class="ctrl-label">햇빛 양</span>
+            <div class="slider-wrap">
+                <input type="range" id="sl-sun" min="0" max="100" value="80">
+                <div class="slider-num" id="sv-sun">80</div>
+            </div>
+        </div>
+        <div class="control-group">
+            <span class="ctrl-icon">🏢</span>
+            <span class="ctrl-label">전력 수요</span>
+            <div class="slider-wrap">
+                <input type="range" id="sl-dem" min="0" max="100" value="40">
+                <div class="slider-num" id="sv-dem">40</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ── Config ──
+    const DOTS = 12;
+    const DOT_R = 4.2;
+    const SPEED = 0.005;
+
+    const PPA_RATE = 100;   // 원/kWh
+    const GRID_RATE = 140;  // 원/kWh
+
+    const pathMeta = {
+        'path-solar':  { color: '#FF8F00' },
+        'path-home':   { color: '#43A047' },
+        'path-export': { color: '#1565C0' },
+        'path-import': { color: '#E53935' }
+    };
+
+    const flows = {};
+
+    function initDots() {
+        const g = document.getElementById('dots-container');
+        g.innerHTML = '';
+        Object.keys(pathMeta).forEach(pid => {
+            flows[pid] = [];
+            for (let i = 0; i < DOTS; i++) {
+                const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                c.setAttribute('r', DOT_R);
+                c.setAttribute('fill', pathMeta[pid].color);
+                c.setAttribute('opacity', '0');
+                g.appendChild(c);
+                flows[pid].push({ el: c, t: i / DOTS, on: false, rev: false });
+            }
+        });
+    }
+
+    function tick() {
+        Object.keys(flows).forEach(pid => {
+            const path = document.getElementById(pid);
+            const len = path.getTotalLength();
+            flows[pid].forEach(d => {
+                if (!d.on) { d.el.setAttribute('opacity', '0'); return; }
+                d.t += d.rev ? -SPEED : SPEED;
+                if (d.t > 1) d.t -= 1;
+                if (d.t < 0) d.t += 1;
+                const p = path.getPointAtLength(d.t * len);
+                d.el.setAttribute('cx', p.x);
+                d.el.setAttribute('cy', p.y);
+                const edge = Math.min(d.t, 1 - d.t) * 7;
+                d.el.setAttribute('opacity', Math.min(0.88, edge));
+                d.el.setAttribute('r', DOT_R + Math.sin(d.t * Math.PI * 2) * 1.2);
+            });
+        });
+        requestAnimationFrame(tick);
+    }
+
+    function setFlow(pid, on, rev = false) {
+        flows[pid].forEach(d => { d.on = on; d.rev = rev; });
+        document.getElementById(pid).style.opacity = on ? '0.25' : '0.08';
+    }
+
+    function setLabel(id, on) {
+        document.getElementById(id).setAttribute('opacity', on ? '0.7' : '0');
+    }
+
+    function highlightNode(id, color, on) {
+        const r = document.querySelector(`#${id} .node-bg`);
+        r.style.stroke = on ? color : '#e0e0e0';
+        r.style.filter = on ? `drop-shadow(0 0 10px ${color}33)` : 'drop-shadow(0 3px 8px rgba(0,0,0,0.06))';
+    }
+
+    // ── Main Update ──
+    function update() {
+        const sun = +document.getElementById('sl-sun').value;
+        const dem = +document.getElementById('sl-dem').value;
+        document.getElementById('sv-sun').textContent = sun;
+        document.getElementById('sv-dem').textContent = dem;
+
+        const gen = Math.round(sun * 1.5);      // kW 발전
+        const use = Math.round(dem * 1.2);       // kW 소비
+        const selfUse = Math.min(gen, use);      // 자가소비
+        const surplus = Math.max(0, gen - use);  // 잉여
+        const deficit = Math.max(0, use - gen);  // 부족
+
+        // Header
+        document.getElementById('h-gen').textContent = gen + ' kW';
+        document.getElementById('h-self').textContent = selfUse + ' kW';
+        document.getElementById('h-export').textContent = surplus + ' kW';
+
+        const statusEl = document.getElementById('h-status');
+
+        // Flows
+        setFlow('path-solar', gen > 0);
+        setFlow('path-home', selfUse > 0);
+        setLabel('lbl-solar', gen > 0);
+        setLabel('lbl-home', selfUse > 0);
+
+        if (surplus > 0) {
+            setFlow('path-export', true);
+            setFlow('path-import', false);
+            setLabel('lbl-export', true);
+            setLabel('lbl-import', false);
+            document.getElementById('grid-val').textContent = '+' + surplus + ' kW 송전';
+            document.getElementById('grid-val').style.fill = '#1565C0';
+            statusEl.textContent = '잉여 송전';
+            statusEl.className = 'stat-value export-color';
+        } else if (deficit > 0) {
+            setFlow('path-export', false);
+            setFlow('path-import', true);
+            setLabel('lbl-export', false);
+            setLabel('lbl-import', true);
+            document.getElementById('grid-val').textContent = '-' + deficit + ' kW 수전';
+            document.getElementById('grid-val').style.fill = '#E53935';
+            statusEl.textContent = '한전 수전';
+            statusEl.className = 'stat-value import-color';
+        } else {
+            setFlow('path-export', false);
+            setFlow('path-import', false);
+            setLabel('lbl-export', false);
+            setLabel('lbl-import', false);
+            document.getElementById('grid-val').textContent = '대기';
+            document.getElementById('grid-val').style.fill = '#999';
+            if (gen === 0 && use === 0) {
+                statusEl.textContent = '대기 중';
+                statusEl.className = 'stat-value';
+            } else {
+                statusEl.textContent = '자급자족';
+                statusEl.className = 'stat-value self-color';
+            }
+        }
+
+        // Node highlights
+        highlightNode('node-solar', '#FF8F00', gen > 0);
+        highlightNode('node-inverter', '#1565C0', gen > 0);
+        highlightNode('node-home', '#43A047', use > 0);
+        highlightNode('node-grid', surplus > 0 ? '#1565C0' : '#E53935', surplus > 0 || deficit > 0);
+
+        // PPA Economics
+        // 자가소비분: PPA 단가로 구매 (한전 단가 대비 절감)
+        // 부족분: 한전 단가로 구매
+        const savingPerHour = selfUse * (GRID_RATE - PPA_RATE);
+        const savingEl = document.getElementById('ic-saving');
+        if (savingPerHour > 0) {
+            savingEl.textContent = savingPerHour.toLocaleString();
+            savingEl.className = 'ic-value saving';
+        } else {
+            savingEl.textContent = '0';
+            savingEl.className = 'ic-value';
+        }
+
+        // Slider visual
+        const ss = document.getElementById('sl-sun');
+        const sd = document.getElementById('sl-dem');
+        ss.style.background = `linear-gradient(to right, #ffe0b2 0%, #ff8f00 ${sun}%, #e8e8e8 ${sun}%)`;
+        sd.style.background = `linear-gradient(to right, #bbdefb 0%, #1565c0 ${dem}%, #e8e8e8 ${dem}%)`;
+    }
+
+    // ── Init ──
+    initDots();
+    tick();
+    update();
+
+    document.getElementById('sl-sun').addEventListener('input', update);
+    document.getElementById('sl-dem').addEventListener('input', update);
+    setInterval(update, 400);
+</script>
+
+</body>
+</html>
